@@ -16,6 +16,7 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
+
 class AppLockService : Service() {
 
     companion object {
@@ -45,6 +46,10 @@ class AppLockService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            "SHOW_LOCK_SCREEN" -> showLockScreen()
+            else -> return START_STICKY
+        }
         return START_STICKY
     }
 

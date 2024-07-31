@@ -1,7 +1,8 @@
 package com.app.lockcompose
 
-
+import android.accessibilityservice.AccessibilityService
 import android.app.AppOpsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.text.TextUtils
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -55,15 +57,18 @@ class MainActivity : ComponentActivity() {
         val hasUsageStatsPermission = remember { mutableStateOf(hasUsageStatsPermission(context)) }
         val hasOverlayPermission = remember { mutableStateOf(hasOverlayPermission(context)) }
         val hasNotificationPermission = remember { mutableStateOf(isNotificationPermissionGranted(context)) }
+        val isAccessibilityServiceEnabled = remember { mutableStateOf(isAccessibilityServiceEnabled(context, RecentAppsAccessibilityService::class.java)) }
         val isServiceRunning = remember { mutableStateOf(false) }
 
         fun updatePermissionStatus() {
             hasUsageStatsPermission.value = hasUsageStatsPermission(context)
             hasOverlayPermission.value = hasOverlayPermission(context)
             hasNotificationPermission.value = isNotificationPermissionGranted(context)
+            isAccessibilityServiceEnabled.value = isAccessibilityServiceEnabled(context, RecentAppsAccessibilityService::class.java)
         }
 
         fun startAppLockService() {
+
             val intent = Intent(context, AppLockService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ContextCompat.startForegroundService(context, intent)
@@ -78,7 +83,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun hasAllPermissions(): Boolean {
-            return hasUsageStatsPermission.value && hasOverlayPermission.value && hasNotificationPermission.value
+            return hasUsageStatsPermission.value && hasOverlayPermission.value && hasNotificationPermission.value && isAccessibilityServiceEnabled.value
         }
 
         val requestOverlayPermissionLauncher = rememberLauncherForActivityResult(
@@ -94,6 +99,12 @@ class MainActivity : ComponentActivity() {
         }
 
         val requestNotificationPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) {
+            updatePermissionStatus()
+        }
+
+        val requestAccessibilityPermissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) {
             updatePermissionStatus()
@@ -146,6 +157,14 @@ class MainActivity : ComponentActivity() {
                         intent.putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                         requestNotificationPermissionLauncher.launch(intent)
                     }
+                }
+            )
+            PermissionRow(
+                label = "Accessibility Permission",
+                isGranted = isAccessibilityServiceEnabled.value,
+                onClick = {
+                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    requestAccessibilityPermissionLauncher.launch(intent)
                 }
             )
         }
@@ -215,5 +234,18 @@ class MainActivity : ComponentActivity() {
             true
         }
     }
-}
 
+    private fun isAccessibilityServiceEnabled(context: Context, service: Class<out AccessibilityService>): Boolean {
+        val enabledServices = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false // Handle null value by returning false
+
+        val colonSplitter = TextUtils.SimpleStringSplitter(':').apply {
+            setString(enabledServices)
+        }
+
+        val componentNameString = ComponentName(context, service).flattenToString()
+        return colonSplitter.iterator().asSequence().any { it.equals(componentNameString, ignoreCase = true) }
+    }
+}
